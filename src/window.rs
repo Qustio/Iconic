@@ -98,6 +98,7 @@ mod imp {
         //pub drop_target_item: RefCell<Option<gtk::DropTarget>>,
         pub settings: gio::Settings,
         pub count: RefCell<i32>,
+        pub file: RefCell<Option<gio::File>>,
     }
 
     impl Default for GtkTestWindow {
@@ -134,6 +135,7 @@ mod imp {
                 count: RefCell::new(0),
                 default_color: gdk::RGBA::new(0.262745098, 0.552941176, 0.901960784, 1.0),
                 last_dnd_generated_name: RefCell::new(None),
+                file: RefCell::new(None),
                 //drop_target_item: RefCell::new(None),
             }
         }
@@ -202,7 +204,20 @@ mod imp {
                     win,
                     async move {
                         match win.open_save_file_dialog().await {
-                            Ok(_) => (),
+                            Ok(_) => {
+                                if let Some(file) = win.imp().file.borrow().as_ref() {
+                                    let g = win.imp().saved_file.lock().unwrap();
+                                    if let Some(saved_file) = &*g {
+                                        let c = Cancellable::new();
+                                        let file_info = file.query_info("metadata::*", gio::FileQueryInfoFlags::NOFOLLOW_SYMLINKS,Some(&c));
+                                        let Ok(file_info) = file_info else {
+                                            return;
+                                        };
+                                        file_info.set_attribute_string("metadata::custom-icon", &saved_file.uri());
+                                        let _ = file.set_attributes_from_info(&file_info, gio::FileQueryInfoFlags::NOFOLLOW_SYMLINKS, Some(&c));
+                                    }
+                                };
+                            },
                             Err(error) => {
                                 win.show_error_popup(&error.to_string(), true, Some(error));
                             }
@@ -339,7 +354,8 @@ glib::wrapper! {
 
 #[gtk::template_callbacks]
 impl GtkTestWindow {
-    pub fn new<P: IsA<adw::Application>>(application: &P) -> Self {
+
+    pub fn new<P: IsA<adw::Application>>(application: &P, file: Option<gio::File>) -> Self {
         let win = glib::Object::builder::<GtkTestWindow>()
             .property("application", application)
             .build();
@@ -356,6 +372,11 @@ impl GtkTestWindow {
         imp.y_scale.add_mark(9.447, gtk::PositionType::Bottom, None);
         imp.stack.set_visible_child_name("stack_welcome_page");
         imp.reset_color.set_visible(false);
+        imp.file.replace(file);
+        if imp.file.borrow().is_some() {
+            //TODO proper name/icon/pot
+            imp.save_button.get().set_label("Save & Set icon");
+        }
         win.load_folder_path_from_settings();
         win.setup_settings();
         win.setup_update();

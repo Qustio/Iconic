@@ -33,6 +33,8 @@ use gtk::{gio, glib};
 use std::cell::OnceCell;
 
 mod imp {
+
+
     use super::*;
 
     #[derive(Debug, Default)]
@@ -67,7 +69,23 @@ mod imp {
             let window = if let Some(window) = application.active_window() {
                 window
             } else {
-                let window = GtkTestWindow::new(&*application);
+                let window = GtkTestWindow::new(&*application, None);
+                window.upcast()
+            };
+
+            // Ask the window manager/compositor to present the window
+            window.present();
+        }
+
+        fn open(&self, files: &[gio::File], hint: &str) {
+
+            let file = files.first().unwrap().clone();
+            let application = self.obj();
+            // Get the current window or create one if necessary
+            let window = if let Some(window) = application.active_window() {
+                window
+            } else {
+                let window = GtkTestWindow::new(&*application, Some(file));
                 window.upcast()
             };
 
